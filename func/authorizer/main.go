@@ -2,11 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -34,7 +30,7 @@ type AuthorizeResponse struct {
 // AuthorizeHandler is the main function that handles the authorization request
 func AuthorizeHandler(ctx context.Context, request events.APIGatewayCustomAuthorizerRequest) (events.APIGatewayCustomAuthorizerResponse, error) {
 	// Extract the JWT token from the Authorization header
-	token, err := extractJWTToken(request.AuthorizationHeader)
+	token, err := extractJWTToken(request.AuthorizationToken)
 	if err != nil {
 		return events.APIGatewayCustomAuthorizerResponse{}, err
 	}
@@ -46,11 +42,11 @@ func AuthorizeHandler(ctx context.Context, request events.APIGatewayCustomAuthor
 	}
 
 	// Generate the policy document
-	policyDocument := generatePolicyDocument(claims.Username, "Allow", "*")
+	policyDocument := generatePolicyDocument("Allow", "*")
 
 	// Return the policy document
 	return events.APIGatewayCustomAuthorizerResponse{
-		PrincipalID: claims.Username,
+		PrincipalID:    claims.Username,
 		PolicyDocument: policyDocument,
 	}, nil
 }
@@ -82,7 +78,7 @@ func verifyJWTToken(token string) (*JWTClaims, error) {
 }
 
 // generatePolicyDocument generates the policy document for the API Gateway
-func generatePolicyDocument(principalID, effect, resource string) events.APIGatewayCustomAuthorizerPolicy {
+func generatePolicyDocument(effect, resource string) events.APIGatewayCustomAuthorizerPolicy {
 	return events.APIGatewayCustomAuthorizerPolicy{
 		Version: "2012-10-17",
 		Statement: []events.IAMPolicyStatement{
