@@ -84,7 +84,7 @@ func generatePolicyDocument(effect, resource string) events.APIGatewayCustomAuth
 		Statement: []events.IAMPolicyStatement{
 			{
                 Action:   []string{"execute-api:Invoke"},
-				Effect:   effect,
+                Effect:   effect,
                 Resource: []string{resource},
 			},
 		},
