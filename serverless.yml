@@ -1,0 +1,519 @@
+service: go-serverless-api
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out docs.serverless.com for more details
+frameworkVersion: '3'
+configValidationMode: error
+useDotenv: true
+
+provider:
+  name: aws
+  stage: ${opt:stage}
+  region: ${opt:region}
+  stackTags:
+    Type: App
+    GitRepo: ${self:service}
+    
+  iam:
+    # Existing role used to deploy Emprovise CloudFormation
+    deploymentRole: arn:aws:iam::${aws:accountId}:role/APPRoleForServerlessDeploy
+    # Configure the role used by this Serverless deployment
+    role:
+      path: /emprovise/
+      permissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/ApplicationRuntimeBoundary
+
+      # Use Principal of Least Privilege https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege
+      # Keep permissions regional as much as possible https://aws.amazon.com/blogs/security/easier-way-to-control-access-to-aws-regions-using-iam-policies/
+      statements:
+        - Sid: SQS
+          Effect: Allow
+          Action:
+            - sqs:SendMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueUrl
+            - sqs:GetQueueAttributes
+            - sqs:ReceiveMessage
+            - kms:Decrypt
+          Resource:
+            - !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:${param:iamPrefix}account-lifecycle*
+            - ${ssm:/kms/KMS-SQS-account-lifecycle, ssm:/kms/KMS-SQS}
+
+        - Sid: S3
+          Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:GetBucketLocation
+            - s3:ListMultipartUploadParts
+            - s3:AbortMultipartUpload
+            - s3:DeleteObject
+            - s3:ListBucket
+          Resource:
+            - arn:aws:s3:::${param:bookmarksBucketName}
+            - arn:aws:s3:::${param:bookmarksBucketName}/*
+            - !GetAtt BookmarksSummaryBucket.Arn
+            - !Join [ '/', [!GetAtt BookmarksSummaryBucket.Arn, '*'] ]
+
+        - Sid: DynamoDBTable
+          Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:Query
+            - dynamodb:UpdateItem
+            - dynamodb:BatchWriteItem
+            - dynamodb:GetItem
+            - dynamodb:DeleteItem
+            - dynamodb:DescribeTable
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:ListTables
+          Resource:
+            - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${param:userBookmarkTable}
+            - !GetAtt BookmarkDistributionTable.Arn
+
+        - Sid: KMS
+          Effect: Allow
+          Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey
+            - kms:DescribeKey
+            - kms:CreateGrant
+            - kms:ListGrants
+            - kms:RevokeGrant
+            - kms:ListAliases
+          Resource: ${param:kmsIAMResources}
+
+        - Sid: LaunchDarkly
+          Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+            - kms:Decrypt
+          Resource:
+            - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:common/config/launchdarkly.json-??????
+            - ${ssm:/kms/KMS-SEC-MGR}
+
+        - Sid: StateMachine
+          Effect: Allow
+          Action:
+            - states:CreateActivity
+            - states:DeleteActivity
+            - states:DescribeActivity
+            - states:DescribeExecution
+            - states:DescribeStateMachine
+            - states:GetActivityTask
+            - states:GetExecutionHistory
+            - states:ListActivities
+            - states:ListExecutions
+            - states:ListStateMachines
+            - states:ListTagsForResource
+            - states:SendTaskFailure
+            - states:SendTaskSuccess
+            - states:StartExecution
+            - states:StopExecution
+          Resource:
+            - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:*
+
+  deploymentBucket:
+    name: ${ssm:slsDeploymentBucket, null}
+    blockPublicAccess: true
+    serverSideEncryption: aws:kms
+    sseKMSKeyId: ${ssm:/kms/serverless-bucket, null}
+
+  # Deploy Lambdas to Application VPC
+  vpc:
+    securityGroupIds: ${ssm:/application/vpc_security_groups, null}
+    subnetIds: ${ssm:/application/vpc_subnets, null}
+
+  # API Gateway REST API global config
+  apiGateway:
+    # Disable the default 'execute-api' HTTP endpoint
+    disableDefaultEndpoint: ${param:disableDefaultEndpoint}
+    # Detailed Cloud Watch Metrics
+    metrics: true
+  # Endpoint type for API Gateway REST API
+  endpointType: REGIONAL
+
+  # AWS X-Ray Tracing
+  tracing:
+    # Can only be true if API Gateway is inside a stack.
+    apiGateway: true
+    lambda: true
+  # Duration for CloudWatch log retention (default: forever)
+  logRetentionInDays: 90
+
+  # KMS key ARN to use for encryption for all functions
+  kmsKeyArn: ${ssm:/kms/KMS-lambda, null}
+  
+  environment:
+    STAGE: ${sls:stage}
+    API_HOST: ${ssm:/application/${sls:stage}ApiHost, ssm:/application/ApiHost, ''}
+    PRIVATE_API_HOST: ${ssm:/application/${sls:stage}PrivateApiHost, ssm:/application/PrivateApiHost, ''}
+    JWT_ISSUER: ${ssm:/application/jwt_issuer, ''}
+    EMPROVISE_LD_SDK_KEY: ${env:EMPROVISE_LD_SDK_KEY, ''}
+    BOOKMARK_DISTRIBUTION_TABLE_NAME: !Ref BookmarkDistributionTable
+    USER_BOOKMARK_TABLE_NAME: ${param:userBookmarkTable}
+
+params:
+  production:
+    iamPrefix: ''
+    disableDefaultEndpoint: true
+    prefix: ''
+    suffix: ''
+    deletionPolicy: Retain
+    alarmTopic: arn:aws:sns:${aws:region}:${aws:accountId}:pagerduty-global-ruleset
+    bookmarksBucketName: bookmarks-${ssm:stack_name, ' '}-${aws:region}  # Intentionally setting invalid character as default so prod-like stages won't get deployed using stage name
+    bookmarksSummaryBucketName: bookmarks-summary-${ssm:stack_name, ' '}-${aws:region}
+    kmsIAMResources:
+      - ${ssm:/kms/BookmarksDDB, null}
+      - ${ssm:/kms/BookmarksS3, null}
+    ddbSSESpecification:
+      SSEEnabled: true
+      SSEType: KMS
+      KMSMasterKeyId: alias/BookmarksDDB
+    s3SSEConfig:
+      SSEAlgorithm: aws:kms
+      KMSMasterKeyID: ${ssm:/kms/BookmarksS3, null}
+  staging:
+    iamPrefix: ''
+    disableDefaultEndpoint: true
+    prefix: ''
+    suffix: ''
+    deletionPolicy: Retain
+    bookmarksBucketName: bookmarks-${ssm:stack_name, ' '}-${aws:region}
+    bookmarksSummaryBucketName: bookmarks-summary-${ssm:stack_name, ' '}-${aws:region}
+    kmsIAMResources:
+      - ${ssm:/kms/BookmarksDDB, null}
+      - ${ssm:/kms/BookmarksS3, null}
+    ddbSSESpecification:
+      SSEEnabled: true
+      SSEType: KMS
+      KMSMasterKeyId: alias/BookmarksDDB
+    s3SSEConfig:
+      SSEAlgorithm: aws:kms
+      KMSMasterKeyID: ${ssm:/kms/BookmarksS3, null}
+  develop:
+    iamPrefix: ''
+    disableDefaultEndpoint: true
+    prefix: ''
+    suffix: ''
+    deletionPolicy: Retain
+    bookmarksBucketName: bookmarks-${ssm:stack_name, ' '}-${aws:region}
+    bookmarksSummaryBucketName: bookmarks-summary-${ssm:stack_name, ' '}-${aws:region}
+    kmsIAMResources:
+      - ${ssm:/kms/BookmarksDDB, null}
+      - ${ssm:/kms/BookmarksS3, null}
+    ddbSSESpecification:
+      SSEEnabled: true
+      SSEType: KMS
+      KMSMasterKeyId: alias/BookmarksDDB
+    s3SSEConfig:
+      SSEAlgorithm: aws:kms
+      KMSMasterKeyID: ${ssm:/kms/BookmarksS3, null}
+  dev:
+    iamPrefix: ''
+    disableDefaultEndpoint: true
+    prefix: ''
+    suffix: ''
+    kmsIAMResources:
+      - ${ssm:/kms/BookmarksDDB, null}
+      - ${ssm:/kms/BookmarksS3, null}
+    ddbSSESpecification:
+      SSEEnabled: true
+      SSEType: KMS
+      KMSMasterKeyId: alias/BookmarksDDB
+    s3SSEConfig:
+      SSEAlgorithm: aws:kms
+      KMSMasterKeyID: ${ssm:/kms/BookmarksS3, null}
+  default:
+    iamPrefix: '*'
+    disableDefaultEndpoint: false
+    prefix: ${sls:stage}_
+    suffix: -${sls:stage}
+    deletionPolicy: Delete
+    alarmTopic: arn:aws:sns:${aws:region}:${aws:accountId}:monitoring-alarms-${aws:region}
+    userBookmarkTable: ${param:prefix}user_bookmarks
+    bookmarksBucketName: bookmarks-${sls:stage}-${aws:region}
+    bookmarksSummaryBucketName: bookmarks-summary-${sls:stage}-${aws:region}
+    kmsIAMResources:
+      - ${ssm:/kms/KMS-DYNAMODB} # Placeholder to satisfy IAM policy; not actually used in RND stacks
+    ddbSSESpecification:
+      SSEEnabled: false
+    s3SSEConfig:
+      SSEAlgorithm: AES256
+
+package:
+  artifact: ${env:ARTIFACT_LOC, 'bin'}/functions.zip
+
+functions:
+  publicAPI:
+    name: go-bookmarks-api${param:suffix}
+    description: Public Bookmarks API to add bookmarks and sync them across all computers
+    runtime: go1.x
+    handler: func/api/function
+    timeout: 30
+    events:
+      - http:
+          path: /
+          method: any
+          authorizer: ${self:custom.apiGatewayAuthorizer}
+          cors: ${self:custom.cors}
+      - http:
+          path: /{proxy+}
+          method: any
+          authorizer: ${self:custom.apiGatewayAuthorizer}
+          cors: ${self:custom.cors}
+    environment:
+      LOG_LEVEL: debug
+      BOOKMARKS_BUCKET: ${param:bookmarksBucketName}
+      BOOKMARKS_SUMMARY_BUCKET: ${param:bookmarksSummaryBucketName}
+      DISTRIBUTION_STATE_MACHINE_ARN: Test
+      
+  # Mock Authorizer used in standalone RND deployments.
+  authorizer:
+    runtime: python3.9
+    package:
+      individually: true
+      patterns:
+        - '!**'
+        - mock_auth.py
+    handler: mock_auth.main
+
+resources:
+  - Resources:
+      # Resources managed by infra-prod in prod-like stacks, created here for RND stacks
+      BookmarksBucket:
+        Condition: IsNotProdLike
+        Type: AWS::S3::Bucket
+        Properties:
+          BucketName: ${param:bookmarksBucketName}
+          PublicAccessBlockConfiguration:
+            BlockPublicAcls: True
+            BlockPublicPolicy: True
+            IgnorePublicAcls: True
+            RestrictPublicBuckets: True
+          BucketEncryption:
+            ServerSideEncryptionConfiguration:
+              - ServerSideEncryptionByDefault:
+                  SSEAlgorithm: AES256 # Standard for RND stacks
+          VersioningConfiguration:
+            Status: Enabled
+      
+      BookmarksSummaryBucket:
+        Type: AWS::S3::Bucket
+        Properties:
+          BucketName: ${param:bookmarksSummaryBucketName}
+          PublicAccessBlockConfiguration:
+            BlockPublicAcls: True
+            BlockPublicPolicy: True
+            IgnorePublicAcls: True
+            RestrictPublicBuckets: True
+          BucketEncryption:
+            ServerSideEncryptionConfiguration:
+              - ServerSideEncryptionByDefault: ${param:s3SSEConfig}
+          LifecycleConfiguration:
+            Rules:
+              - Id: ExpireData
+                Status: Enabled
+                ExpirationInDays: 1
+
+      DistributionTable:
+        Condition: IsNotProdLike
+        Type: AWS::DynamoDB::Table
+        DeletionPolicy: ${param:deletionPolicy}
+        Properties:
+          TableName: ${param:userBookmarkTable}
+          AttributeDefinitions:
+            - AttributeName: PK
+              AttributeType: S
+          KeySchema:
+            - AttributeName: PK
+              KeyType: HASH
+          BillingMode: PAY_PER_REQUEST
+          TimeToLiveSpecification:
+            AttributeName: Ttl
+            Enabled: true
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: false
+      # End of RND-only resources
+
+      # Please update pkg/dynamodb/entity/device_distribution.go or distribution.go when you change this
+      BookmarkDistributionTable:
+        Type: AWS::DynamoDB::Table
+        DeletionPolicy: ${param:deletionPolicy}
+        Properties:
+          TableName: ${param:prefix}ip_filtering_device_distribution
+          AttributeDefinitions:
+            - AttributeName: PK
+              AttributeType: S
+            - AttributeName: SK
+              AttributeType: S
+          KeySchema:
+            - AttributeName: PK
+              KeyType: HASH
+            - AttributeName: SK
+              KeyType: RANGE
+          BillingMode: PAY_PER_REQUEST
+          TimeToLiveSpecification:
+            AttributeName: Ttl
+            Enabled: true
+          SSESpecification: ${param:ddbSSESpecification}
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: false
+
+      StateMachineRole:
+        Type: AWS::IAM::Role
+        Properties:
+          RoleName: ip-bookmarks-state-machine-role${param:suffix}
+          PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/ApplicationRuntimeBoundary
+          Path: /emprovise/
+          AssumeRolePolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Principal:
+                  Service:
+                    - states.amazonaws.com
+                Action: sts:AssumeRole
+          Policies:
+            - PolicyName: StateMachineResourceAccess
+              PolicyDocument:
+                Version: '2012-10-17'
+                Statement:
+                  # Allow logging
+                  - Effect: Allow
+                    Action:
+                      - logs:*
+                      - cloudwatch:*
+                    Resource: '*'
+                  # Allow Xray
+                  - Effect: Allow
+                    Action:
+                      - xray:PutTraceSegments
+                      - xray:PutTelemetryRecords
+                      - xray:GetSamplingTargets
+                      - xray:GetSamplingStatisticSummaries
+                      - xray:GetSamplingRules
+                    Resource: '*'
+                  # Allow Lambda Execution
+                  - Effect: Allow
+                    Action:
+                      - lambda:InvokeFunction
+                    Resource: !Sub arn:aws:lambda:*:${AWS::AccountId}:function:ip-filtering-*
+      
+  - Conditions:
+      IsProd: !Equals ['${sls:stage}', production]
+      IsStaging: !Equals ['${sls:stage}', staging]
+      IsDevelop: !Equals ['${sls:stage}', develop]
+      IsProdLike: !Or [Condition: IsProd, Condition: IsStaging, Condition: IsDevelop]
+      IsNotProdLike: !Not [Condition: IsProdLike]
+
+  # API domain mapping
+  - ${file(resources/apiMapping.yml)}
+
+  # API Alarms
+  - ${file(resources/apiAlarms.yml)}
+
+  # Account lifecycle event
+  # TODO remove if your app will not store user data
+  - ${file(resources/accountLifecycle.yml)}
+
+
+custom:
+  # Custom domain name
+  domainName: ${ssm:${sls:stage}ApiDomainName, ssm:ApiDomainName, ''}
+
+  # API Gateway authorizer configuration
+  apiGatewayAuthorizer:
+    # Use infra-rnd Stack authorizer if found, otherwise use Prod authorizer if found
+    arn: ${ssm:/application/${sls:stage}LambdaAuthorizer, ssm:/application/AppLambdaAuthorizer, null}
+    # If the above ARN is not provided, Serverless will use the function named "authorizer" from this config.
+    name: authorizer
+    type: request
+    identitySource: ''
+    resultTtlInSeconds: 0
+
+  # Account lifecycle configuration
+  # TODO remove if your app will not store user data
+  enableAccountLifecycleEvent: ${strToBool(${ssm:/application/${sls:stage}EnableAccountLifecycleEvent, ssm:/application/EnableAccountLifecycleEvent, 'false'})}
+  deleteAccountFunctionEvent:
+    - eventBridge:
+        eventBus: ${ssm:/application/${sls:stage}AccountLifecycleEventBus, ssm:/application/AccountLifecycleEventBus, null}
+        pattern:
+          detail-type:
+            - account-lifecycle.v1
+          detail:
+            eventType:
+              - deleted
+        inputPath: $.detail
+        deadLetterQueueArn: !GetAtt AccountLifecycleDlq.Arn
+        retryPolicy:
+          maximumEventAge: 3600
+          maximumRetryAttempts: 3
+
+  # serverless-plugin-ifelse
+  serverlessIfElse:
+    - ExcludeIf:
+        # Do not deploy mock authorizer to accounts other than RND
+        functions.authorizer: '"${aws:accountId}" != "801659726931"'
+        provider.environment.EMPROVISE_LD_SDK_KEY: '/develop|staging|production|^tpsr*/.test("${sls:stage}")'
+        
+    - If: '${self:custom.enableAccountLifecycleEvent} == false'
+      Exclude:
+        - functions.deleteAccount
+        - resources.Resources.AccountDeletionLambdaEventInvokeConfig
+
+  # serverless-prune-plugin
+  prune:
+    automatic: true
+    number: 10
+
+  # serverless-plugin-aws-alerts
+  alerts:
+    # select which stages to deploy alarms to
+    stages: [production, staging, develop]
+    dashboards: true
+    nameTemplate: $[functionName]-$[metricName]
+    prefixTemplate: ${self:service}
+    topics:
+      alarm:
+        topic: ${param:alarmTopic}
+    definitions:
+      functionDuration:  # override default alarm settings
+        actionsEnabled: true
+        description: Alarm to monitor/warn on unusually high run times
+        threshold: 1000
+        statistic: Maximum
+      functionErrors:
+        actionsEnabled: true
+        description: Lamba errors exceeded threshold
+        period: 60
+        threshold: 5
+        datapointsToAlarm: 10
+        evaluationPeriods: 10
+    alarms:
+      - functionDuration
+      - functionErrors
+
+  # CORS (Cross-Origin Resource Sharing) Response headers for HTTP OPTIONS (CORS pre-flight request)
+  # - Access-Control-Allow-Origin
+  # - Access-Control-Allow-Credentials
+  # - Access-Control-Allow-Headers
+  #   - If not specified, API GW defaults: 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'
+  #   - Need to specify here to add the other headers sent by Emprovise UI
+  # - Access-Control-Allow-Methods
+  #   - If not specified, API GW defaults: 'OPTIONS,POST,GET'
+  #   - Need to specify here to also allow DELETE and PUT
+  cors:
+    origin: ${ssm:emprovise_url, ''}
+    allowCredentials: true
+    headers: [Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token, X-Amz-User-Agent, emprovise-authorization, pragma, api-version, cache-control, expires, rid]
+    methods: [DELETE, GET, OPTIONS, POST, PUT]
+
+plugins:
+  - '@serverless/safeguards-plugin'
+  - serverless-step-functions
+  - serverless-plugin-aws-alerts
+  - serverless-plugin-ifelse
+  - serverless-prune-plugin

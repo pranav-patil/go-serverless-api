@@ -1,0 +1,22 @@
+{
+  "name": "go-serverless-api",
+  "version": "1.0.0",
+  "description": "Go Serverless API which has bookmarks API.",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "lint-api": "npx @redocly/cli lint openapi.yaml",
+    "bundle-api": "npx @redocly/cli bundle openapi.yaml -o openapi.json"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^1.0.0-beta.128",
+    "@serverless/safeguards-plugin": "^1.2.1",
+    "npm-check-updates": "^16.10.12",
+    "serverless": "^3.32.2",
+    "serverless-cloud-conformity": "^1.14.0",
+    "serverless-plugin-aws-alerts": "^1.7.5",
+    "serverless-plugin-ifelse": "^1.0.7",
+    "serverless-prune-plugin": "^2.0.1",
+    "serverless-step-functions": "^3.12.1"
+  }
+}

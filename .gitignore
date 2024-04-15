@@ -1,0 +1,67 @@
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+
+# Folders
+_obj
+_test
+
+# Editor files
+*.sublime-project
+*.sublime-workspace
+*.vscode
+
+# Compiled Output
+dist/
+tmp/
+out-tsc/
+bazel-out/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.terraform.lock.hcl
+
+# Serverless
+admin.env
+.env
+_meta
+.serverless/
+serverless.local.yml
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.pid
+
+# Test binary, built with `go test -c`
+*.test
+
+# Mock
+*_mock.go
+**/mocks/
+
+# Output of the coverage tool, specifically when used with LiteIDE
+*.out
+
+# emacs
+*~
+\#*\#
+.\#*
+
+# Go workspace file
+go.work
+
+bin/
+**/volume/
+**/function
