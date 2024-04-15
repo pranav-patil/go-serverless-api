@@ -2,6 +2,9 @@
 
 Go Serverless API showcases Gin framework of Golang, setting up AWS lambda and execution using stepfunctions. The example APIs are to create/update/delete and search by bookmarks. Also the step function process uses the list of HTTP Bookmark URLs to gather all the webpages for each link and provide the corresponding content on the webpage.
 
+![Bookmarks API](images/bookmarks-api.png)
+
+
 ## Setup
 
 1. Install [Go v1.21.x](https://go.dev/dl/)
@@ -69,7 +72,29 @@ Integration test allows to execute [Ginkgo](https://onsi.github.io/ginkgo/) test
 
        make run-int-test
 
-## Deploy
+## Infrastructure Setup
+
+Need to have a AWS account to deploy Serverless lambda application in cloud.
+
+1. Install or update the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+
+2. Run the below configure command to create login profile. To create `default` profile remove the `--profile` option. Enter the AWS Access Key ID, Secret Access Key, default region, and default output format for the profile when prompted to setup new AWS profile. 
+The AWS CLI will create a profile configuration in the `~/.aws/config` file along with `~/.aws/credentials` with login credentials.
+
+        $ aws configure --profile <profile_name>
+
+3. Install [Terraform v1.5.7](https://developer.hashicorp.com/terraform/install) using the steps from [tutorial](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli).
+
+4. Install [Terragrunt v0.54.17](https://terragrunt.gruntwork.io/docs/getting-started/install/)
+
+5. Execute the below terragrunt commands to deploy the application resources.
+
+        $ terragrunt init
+        $ terragrunt plan
+        $ terragrunt apply -auto-approve -input=false
+
+
+## Deploy Serverless Application
 
 Go Serverless API deployment in an AWS environment requires a stack name be provided and the AWS deployment region. Use below SLS command for deployment.
 
