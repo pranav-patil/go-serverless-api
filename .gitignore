@@ -7,10 +7,16 @@
 _obj
 _test
 
+# Backup files
+*.bak
+*.swp
+*.swo
+
 # Editor files
 *.sublime-project
 *.sublime-workspace
 *.vscode
+*.idea
 
 # Compiled Output
 dist/
@@ -23,11 +29,22 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
-# Terraform
-.terraform/
+# Terraform Compiled files
 *.tfstate
 *.tfstate.*
+*.tfvars
+*.tfvars.json
+*.tfplan
+*.tfplan.*
 *.terraform.lock.hcl
+
+# Terraform directories
+.terraform/
+.terragrunt-cache/
+
+# Terragrunt directories
+.terragrunt-home/
+
 
 # Serverless
 admin.env
@@ -65,3 +82,6 @@ go.work
 bin/
 **/volume/
 **/function
+
+# Logs
+*.log
