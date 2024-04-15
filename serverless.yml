@@ -270,15 +270,15 @@ functions:
       BOOKMARKS_SUMMARY_BUCKET: ${param:bookmarksSummaryBucketName}
       DISTRIBUTION_STATE_MACHINE_ARN: Test
       
-  # Mock Authorizer used in standalone RND deployments.
+  # Mock API Authorizer
   authorizer:
-    runtime: python3.9
-    package:
-      individually: true
-      patterns:
-        - '!**'
-        - mock_auth.py
-    handler: mock_auth.main
+    name: api-authorizer${param:suffix}
+    description: Mock API Authorizer
+    runtime: go1.x
+    handler: func/authorizer/function
+    timeout: 30
+    environment:
+      LOG_LEVEL: debug
 
 resources:
   - Resources:
