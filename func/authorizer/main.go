@@ -83,18 +83,15 @@ func verifyJWTToken(token string) (*JWTClaims, error) {
 
 // generatePolicyDocument generates the policy document for the API Gateway
 func generatePolicyDocument(principalID, effect, resource string) events.APIGatewayCustomAuthorizerPolicy {
-    return events.APIGatewayCustomAuthorizerResponse {
-        PrincipalID: "my-user",
-        PolicyDocument: events.APIGatewayCustomAuthorizerPolicy{
-            Version: "2012-10-17",
-            Statement: []events.IAMPolicyStatement{
-                {
-                    Action:   []string{"execute-api:Invoke"},
-                    Effect:   effect,
-                    Resource: []string{resource},
-                },
-            },
-        }
+	return events.APIGatewayCustomAuthorizerPolicy{
+		Version: "2012-10-17",
+		Statement: []events.IAMPolicyStatement{
+			{
+                Action:   []string{"execute-api:Invoke"},
+				Effect:   effect,
+                Resource: []string{resource},
+			},
+		},
 	}
 }
 
