@@ -91,7 +91,7 @@ resource "aws_route" "private_to_intra_nat" {
   for_each = { for key, value in module.app_vpc.private_route_table_ids : key => value }
 
   route_table_id         = each.value
-  destination_cidr_block = var.tm_private_cidr
+  destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.navigate_transit_gateway[each.key].id
 }
 

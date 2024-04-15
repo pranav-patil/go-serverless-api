@@ -1,19 +1,8 @@
-locals {
-  proxy_arn_str_list = split(":", aws_db_proxy.db.arn)
-}
-
 resource "aws_ssm_parameter" "public_api_domain" {
   name        = "PublicApiDomainName"
   description = "Emprovise Public API domain name"
   type        = "String"
   value       = aws_api_gateway_domain_name.api_domain.domain_name
-}
-
-resource "aws_ssm_parameter" "internal_domain" {
-  name        = "InternalApiDomainName"
-  description = "Internal API domain name"
-  type        = "String"
-  value       = var.svp_internal_domain
 }
 
 resource "aws_ssm_parameter" "application_subnets" {
