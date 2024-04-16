@@ -1,9 +1,8 @@
 
-
 module "kms_dynamo" {
   source = "./modules/kms"
 
-  name       = "KMS-DYNAMO"
+  name       = "KMS-DYNAMODB"
   account_id = var.account_id
 
   description              = "KMS key for dynamo encryption"
@@ -14,8 +13,6 @@ module "kms_dynamo" {
   tags                     = local.tags
   multi_region             = false
 }
-
-
 
 module "kms_s3" {
   source = "./modules/kms"
@@ -32,13 +29,28 @@ module "kms_s3" {
   multi_region             = false
 }
 
-module "kms_lambda_env" {
+module "kms_sqs" {
   source = "./modules/kms"
 
-  name       = "KMS-LAMBDA-ENV"
+  name       = "KMS-SQS"
   account_id = var.account_id
 
-  description              = "KMS key for lambda environment variable encryption"
+  description              = "KMS key for SQS encryption"
+  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  key_usage                = "ENCRYPT_DECRYPT"
+  enable_key_rotation      = true
+  is_enabled               = true
+  tags                     = local.tags
+  multi_region             = false
+}
+
+module "kms_serverless_bucket" {
+  source = "./modules/kms"
+
+  name       = "serverless-bucket"
+  account_id = var.account_id
+
+  description              = "KMS key for lambda serverless bucket"
   customer_master_key_spec = "SYMMETRIC_DEFAULT"
   key_usage                = "ENCRYPT_DECRYPT"
   enable_key_rotation      = true
