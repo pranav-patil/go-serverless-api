@@ -51,9 +51,15 @@ variable "intra_nat_cidr" {
   default     = ""
 }
 
-variable "dcs_tgw_id" {
-  description = "GIS transit gateway ID"
-  type        = string
-  default     = ""
+variable "slack_channels" {
+  description = "Service slack channel ID(s)"
+  type        = map(string)
+  default     = {}
 }
+
+variable "sns_regions" {
+  description = "SNS regions Chatbot subscribes"
+  type        = list(string)
+}
+
 

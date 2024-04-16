@@ -27,8 +27,6 @@ locals {
 }
 
 # Create VPC
-# Ignore vpc-flow-logs for now, create backlog to track and enable it in future
-# tfsec:ignore:aws-ec2-require-vpc-flow-logs-for-all-vpcs
 module "app_vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.0.0"
@@ -59,25 +57,12 @@ module "app_vpc" {
   ]
 }
 
-# private NAT for SVP
+# private NAT
 resource "aws_nat_gateway" "navigate_transit_gateway" {
   count = length(module.app_vpc.intra_subnets)
 
   connectivity_type = "private"
   subnet_id         = module.app_vpc.intra_subnets[count.index]
-
-  tags = local.tags
-
-  lifecycle {
-    ignore_changes = [tags]
-  }
-}
-
-# transit gateway attachment
-resource "aws_ec2_transit_gateway_vpc_attachment" "tgw_attachment" {
-  subnet_ids         = module.app_vpc.intra_subnets
-  transit_gateway_id = var.dcs_tgw_id
-  vpc_id             = module.app_vpc.vpc_id
 
   tags = local.tags
 

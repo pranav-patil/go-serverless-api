@@ -16,13 +16,17 @@ inputs = {
   allow_rd_read_ddb        = true
   enable_rd_develop_policy = true
 
-  app_regions = [
-    "us-1",
-  ]
+  app_regions = ["us-1"]
+
+  # monitoring
+  sns_regions    = ["us-east-1"]
 
   deploy_artifact_bucket = true
 
   # vpc cidr
   intra_nat_cidr = "10.10.10.0/24"
-  dcs_tgw_id     = "tgw-078989ec20bed97f7e3"
+  
+  slack_channels = {
+    "app-bookmarks-api" = "C06UCLHRF7F",
+  }
 }

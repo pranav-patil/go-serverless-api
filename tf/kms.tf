@@ -44,6 +44,21 @@ module "kms_sqs" {
   multi_region             = false
 }
 
+module "kms_sns" {
+  source = "./modules/kms"
+
+  name       = "KMS-SNS"
+  account_id = var.account_id
+
+  description              = "KMS key for SNS encryption"
+  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  key_usage                = "ENCRYPT_DECRYPT"
+  enable_key_rotation      = true
+  is_enabled               = true
+  tags                     = local.tags
+  multi_region             = false
+}
+
 module "kms_lambda" {
   source = "./modules/kms"
 

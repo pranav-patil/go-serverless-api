@@ -160,7 +160,6 @@ params:
     prefix: ''
     suffix: ''
     deletionPolicy: Retain
-    alarmTopic: arn:aws:sns:${aws:region}:${aws:accountId}:slack-alert-channel
     bookmarksBucketName: bookmarks-${ssm:stack_name, ' '}-${aws:region}  # Intentionally setting invalid character as default so prod-like stages won't get deployed using stage name
     bookmarksSummaryBucketName: bookmarks-summary-${ssm:stack_name, ' '}-${aws:region}
     kmsIAMResources:
@@ -230,7 +229,7 @@ params:
     prefix: ${sls:stage}_
     suffix: -${sls:stage}
     deletionPolicy: Delete
-    alarmTopic: arn:aws:sns:${aws:region}:${aws:accountId}:monitoring-alarms-${aws:region}
+    alarmTopic: arn:aws:sns:${aws:region}:${aws:accountId}:app-bookmarks-api
     bookmarksBucketName: bookmarks-${sls:stage}-${aws:region}
     bookmarksSummaryBucketName: bookmarks-summary-${sls:stage}-${aws:region}
     kmsIAMResources:
@@ -361,7 +360,7 @@ resources:
       StateMachineRole:
         Type: AWS::IAM::Role
         Properties:
-          RoleName: ip-bookmarks-state-machine-role${param:suffix}
+          RoleName: bookmarks-summary-state-machine-role${param:suffix}
           PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/ApplicationRuntimeBoundary
           Path: /emprovise/
           AssumeRolePolicyDocument:
@@ -404,16 +403,6 @@ resources:
       IsDevelop: !Equals ['${sls:stage}', develop]
       IsProdLike: !Or [Condition: IsProd, Condition: IsStaging, Condition: IsDevelop]
       IsNotProdLike: !Not [Condition: IsProdLike]
-
-  # API domain mapping
-  - ${file(resources/apiMapping.yml)}
-
-  # API Alarms
-  - ${file(resources/apiAlarms.yml)}
-
-  # Account lifecycle event
-  # TODO remove if your app will not store user data
-  - ${file(resources/accountLifecycle.yml)}
 
 
 custom:
