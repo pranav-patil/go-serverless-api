@@ -1,7 +1,3 @@
-resource "aws_iam_role_policy_attachment" "chatbot_execution_role_read_only_access" {
-  role       = aws_iam_role.chatbot_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
-}
 
 resource "awscc_chatbot_slack_channel_configuration" "slack" {
   # TODO: replace vcs_public_api with {} once public api fix false alarm
