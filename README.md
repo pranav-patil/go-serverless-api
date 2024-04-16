@@ -38,6 +38,10 @@ These mocks are generated using using the[mockgen](https://github.com/golang/moc
 
        make mocks
 
+In case the above `make mocks` fails due to dependent modules then execute `go mod tidy` before. If go download modules fails due to mocks then clean the go runtime modules using below command.
+
+       go clean -modcache
+
 To execute all the unit tests (which also generates mocks) use the below make command.
 
        make test

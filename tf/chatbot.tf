@@ -1,6 +1,5 @@
 
 resource "awscc_chatbot_slack_channel_configuration" "slack" {
-  # TODO: replace vcs_public_api with {} once public api fix false alarm
   for_each = var.slack_channels
 
   configuration_name = each.key
