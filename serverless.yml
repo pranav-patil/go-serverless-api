@@ -148,9 +148,7 @@ provider:
   
   environment:
     STAGE: ${sls:stage}
-    API_HOST: ${ssm:/application/${sls:stage}PublicApiDomain, ssm:/application/PublicApiDomain, ''}
-    PRIVATE_API_HOST: ${ssm:/application/${sls:stage}PrivateApiHost, ssm:/application/PrivateApiHost, ''}
-    JWT_ISSUER: ${ssm:/application/jwt_issuer, ''}
+    API_HOST: ${self:custom.publicDomainName}
     EMPROVISE_LD_SDK_KEY: ${env:EMPROVISE_LD_SDK_KEY, ''}
     USER_BOOKMARK_TABLE_NAME: !Ref UserBookmarks
     BOOKMARK_DISTRIBUTION_TABLE_NAME: !Ref BookmarkDistributionTable
@@ -162,7 +160,7 @@ params:
     prefix: ''
     suffix: ''
     deletionPolicy: Retain
-    alarmTopic: arn:aws:sns:${aws:region}:${aws:accountId}:pagerduty-global-ruleset
+    alarmTopic: arn:aws:sns:${aws:region}:${aws:accountId}:slack-alert-channel
     bookmarksBucketName: bookmarks-${ssm:stack_name, ' '}-${aws:region}  # Intentionally setting invalid character as default so prod-like stages won't get deployed using stage name
     bookmarksSummaryBucketName: bookmarks-summary-${ssm:stack_name, ' '}-${aws:region}
     kmsIAMResources:
@@ -420,7 +418,7 @@ resources:
 
 custom:
   # Custom domain name
-  domainName: ${ssm:${sls:stage}ApiDomainName, ssm:ApiDomainName, ''}
+  publicDomainName: ${ssm:/application/${sls:stage}PublicApiDomain, ssm:/application/PublicApiDomain, ''}
 
   # API Gateway authorizer configuration
   apiGatewayAuthorizer:
@@ -501,7 +499,7 @@ custom:
   #   - If not specified, API GW defaults: 'OPTIONS,POST,GET'
   #   - Need to specify here to also allow DELETE and PUT
   cors:
-    origin: ${ssm:emprovise_url, ''}
+    origin: ${self:custom.publicDomainName}
     allowCredentials: true
     headers: [Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token, X-Amz-User-Agent, emprovise-authorization, pragma, api-version, cache-control, expires, rid]
     methods: [DELETE, GET, OPTIONS, POST, PUT]
