@@ -82,6 +82,8 @@ go.work
 bin/
 **/volume/
 **/function
+*.zip
+**/bootstrap
 
 # Logs
 *.log

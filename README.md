@@ -16,7 +16,7 @@ Go Serverless API showcases Gin framework of Golang, setting up AWS lambda and e
        gvm install go1.21
        gvm use go1.21
 
-2. Install [Node.js](https://nodejs.org/)
+2. Install [Node.js](https://nodejs.org/) (v21.7.3 or above is recommended)
 
 3. Install packages.
 
@@ -106,7 +106,7 @@ Go Serverless API deployment in an AWS environment requires a stack name be prov
 
 The Go Serverless APIs can also be accessed using the internal API Gateway URLs which are displayed in the console after the SLS deployment as endpoint. Use below API Gateway URLs.
 
-      https://[API_GATEWAY_ID].execute-api.[REGION].amazonaws.com/[STACK_NAME]/api/go/bookmarks/
+      https://[API_GATEWAY_ID].execute-api.[REGION].amazonaws.com/[STACK_NAME]/emprovise/api/bookmarks/
 
 To remove the serverless stack from AWS environment use below command:
 

@@ -7,12 +7,13 @@
 GOFILES := $(shell find . -name "*.go")
 
 TARGETS=$(sort $(dir $(wildcard func/*/*.go)))
-FUNCTIONS=$(addsuffix function,$(TARGETS))
-ARTIFACT=bin/functions.zip
+FUNCTIONS=$(addsuffix bootstrap,$(TARGETS))
+PACKAGES=$(FUNCTIONS:/bootstrap=.zip)
+ARTIFACT=bin/
 
 LOCALSTACK_DIR=integration_test/localstack
 
-build-ci: test $(ARTIFACT)
+build-ci: test $(ARTIFACT) $(FUNCTIONS) $(PACKAGES)
 build: lint build-ci
 
 tidy: | node_modules/go.mod
@@ -42,9 +43,12 @@ mocks:
 	
 	go generate ./...
 
-%/function: %/*.go | node_modules/go.mod
+%/bootstrap: %/*.go | node_modules/go.mod
 	go test -v ./$*
-	env GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o $@ ./$*
+	env GOARCH=amd64 GOOS=linux go build -tags lambda.norpc -o $@ ./$*
+	zip -FS -j $*.zip $@
+	cp $*.zip $(ARTIFACT)
+
 
 coverage:
 	go tool cover -html=coverage.out
@@ -53,9 +57,8 @@ coverage:
 node_modules/go.mod:
 	-@touch $@
 
-$(ARTIFACT): $(FUNCTIONS)
+$(ARTIFACT):
 	@mkdir -p $(dir $(ARTIFACT))
-	zip $@ $(FUNCTIONS) mockAuth.js
 	@echo
 	@echo ====== Build Successful ========
 	@echo
@@ -65,7 +68,8 @@ clean:
 	rm -vf *.pid
 	find . -name mocks -type d -exec rm -rf {} +
 	find . -name gomock_reflect_* -type d -exec rm -rf {} +
-	$(RM) $(FUNCTIONS) $(ARTIFACT)
+	$(RM) $(FUNCTIONS) $(PACKAGES)
+	$(RM) -r $(ARTIFACT)
 
 export STAGE := testing
 export LOG_LEVEL := debug

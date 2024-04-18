@@ -8,8 +8,9 @@ useDotenv: true
 
 provider:
   name: aws
-  stage: ${opt:stage}
-  region: ${opt:region}
+  stage: ${opt:stage, 'dev'}
+  region: ${env:AWS_DEFAULT_REGION, 'us-east-1'}
+  runtime: provided.al2023
   stackTags:
     Type: App
     GitRepo: ${self:service}
@@ -52,7 +53,7 @@ provider:
             - arn:aws:s3:::${param:bookmarksBucketName}
             - arn:aws:s3:::${param:bookmarksBucketName}/*
             - !GetAtt BookmarksSummaryBucket.Arn
-            - !Join [ '/', [!GetAtt BookmarksSummaryBucket.Arn, '*'] ]
+            - !Join [ '/', [!GetAtt 'BookmarksSummaryBucket.Arn', '*'] ]
 
         - Sid: DynamoDBTable
           Effect: Allow
@@ -68,8 +69,8 @@ provider:
             - dynamodb:Scan
             - dynamodb:ListTables
           Resource:
-            - !GetAtt UserBookmarksTable.Arn
-            - !GetAtt BookmarkDistributionTable.Arn
+            - !GetAtt 'UserBookmarksTable.Arn'
+            - !GetAtt 'BookmarkDistributionTable.Arn'
 
         - Sid: KMS
           Effect: Allow
@@ -83,7 +84,9 @@ provider:
             - kms:ListGrants
             - kms:RevokeGrant
             - kms:ListAliases
-          Resource: ${param:kmsIAMResources}
+          Resource:
+            - ${ssm:/kms/KMS-DYNAMODB, '*'}
+            - ${ssm:/kms/KMS-S3, '*'}
 
         - Sid: LaunchDarkly
           Effect: Allow
@@ -150,7 +153,7 @@ provider:
     STAGE: ${sls:stage}
     API_HOST: ${self:custom.publicDomainName}
     EMPROVISE_LD_SDK_KEY: ${env:EMPROVISE_LD_SDK_KEY, ''}
-    USER_BOOKMARK_TABLE_NAME: !Ref UserBookmarks
+    USER_BOOKMARK_TABLE_NAME: !Ref UserBookmarksTable
     BOOKMARK_DISTRIBUTION_TABLE_NAME: !Ref BookmarkDistributionTable
 
 params:
@@ -162,9 +165,6 @@ params:
     deletionPolicy: Retain
     bookmarksBucketName: bookmarks-${ssm:stack_name, ' '}-${aws:region}  # Intentionally setting invalid character as default so prod-like stages won't get deployed using stage name
     bookmarksSummaryBucketName: bookmarks-summary-${ssm:stack_name, ' '}-${aws:region}
-    kmsIAMResources:
-      - ${ssm:/kms/KMS-DYNAMODB, null}
-      - ${ssm:/kms/KMS-S3, null}
     ddbSSESpecification:
       SSEEnabled: true
       SSEType: KMS
@@ -180,9 +180,6 @@ params:
     deletionPolicy: Retain
     bookmarksBucketName: bookmarks-${ssm:stack_name, ' '}-${aws:region}
     bookmarksSummaryBucketName: bookmarks-summary-${ssm:stack_name, ' '}-${aws:region}
-    kmsIAMResources:
-      - ${ssm:/kms/KMS-DYNAMODB, null}
-      - ${ssm:/kms/KMS-S3, null}
     ddbSSESpecification:
       SSEEnabled: true
       SSEType: KMS
@@ -198,9 +195,6 @@ params:
     deletionPolicy: Retain
     bookmarksBucketName: bookmarks-${ssm:stack_name, ' '}-${aws:region}
     bookmarksSummaryBucketName: bookmarks-summary-${ssm:stack_name, ' '}-${aws:region}
-    kmsIAMResources:
-      - ${ssm:/kms/KMS-DYNAMODB, null}
-      - ${ssm:/kms/KMS-S3, null}
     ddbSSESpecification:
       SSEEnabled: true
       SSEType: KMS
@@ -213,9 +207,6 @@ params:
     disableDefaultEndpoint: true
     prefix: ''
     suffix: ''
-    kmsIAMResources:
-      - ${ssm:/kms/KMS-DYNAMODB, null}
-      - ${ssm:/kms/KMS-S3, null}
     ddbSSESpecification:
       SSEEnabled: true
       SSEType: KMS
@@ -229,25 +220,24 @@ params:
     prefix: ${sls:stage}_
     suffix: -${sls:stage}
     deletionPolicy: Delete
-    alarmTopic: arn:aws:sns:${aws:region}:${aws:accountId}:app-bookmarks-api
+    alarmTopic: !Sub arn:aws:sns:${aws:region}:${aws:accountId}:app-bookmarks-api
     bookmarksBucketName: bookmarks-${sls:stage}-${aws:region}
     bookmarksSummaryBucketName: bookmarks-summary-${sls:stage}-${aws:region}
-    kmsIAMResources:
-      - ${ssm:/kms/KMS-DYNAMODB} # Placeholder to satisfy IAM policy; not actually used in RND stacks
     ddbSSESpecification:
       SSEEnabled: false
     s3SSEConfig:
       SSEAlgorithm: AES256
 
 package:
-  artifact: ${env:ARTIFACT_LOC, 'bin'}/functions.zip
+  individually: true
 
 functions:
   publicAPI:
     name: app-bookmarks-api${param:suffix}
     description: Public Bookmarks API to add bookmarks and sync them across all computers
-    runtime: go1.x
-    handler: func/api/function
+    handler: bootstrap
+    package:
+      artifact: ${env:ARTIFACT_LOC, 'bin'}/api.zip
     timeout: 30
     events:
       - http:
@@ -270,8 +260,9 @@ functions:
   authorizer:
     name: app-api-authorizer${param:suffix}
     description: Mock API Authorizer
-    runtime: go1.x
-    handler: func/authorizer/function
+    handler: bootstrap
+    package:
+      artifact: ${env:ARTIFACT_LOC, 'bin'}/authorizer.zip
     timeout: 30
     environment:
       LOG_LEVEL: debug
@@ -418,33 +409,10 @@ custom:
     identitySource: ''
     resultTtlInSeconds: 0
 
-  # Account lifecycle configuration
-  # TODO remove if your app will not store user data
-  enableAccountLifecycleEvent: ${strToBool(${ssm:/application/${sls:stage}EnableAccountLifecycleEvent, ssm:/application/EnableAccountLifecycleEvent, 'false'})}
-  deleteAccountFunctionEvent:
-    - eventBridge:
-        eventBus: ${ssm:/application/${sls:stage}AccountLifecycleEventBus, ssm:/application/AccountLifecycleEventBus, null}
-        pattern:
-          detail-type:
-            - account-lifecycle.v1
-          detail:
-            eventType:
-              - deleted
-        inputPath: $.detail
-        deadLetterQueueArn: !GetAtt AccountLifecycleDlq.Arn
-        retryPolicy:
-          maximumEventAge: 3600
-          maximumRetryAttempts: 3
-
   # serverless-plugin-ifelse
   serverlessIfElse:
     - ExcludeIf:
         provider.environment.EMPROVISE_LD_SDK_KEY: '/develop|staging|production/.test("${sls:stage}")'
-        
-    - If: '${self:custom.enableAccountLifecycleEvent} == false'
-      Exclude:
-        - functions.deleteAccount
-        - resources.Resources.AccountDeletionLambdaEventInvokeConfig
 
   # serverless-prune-plugin
   prune:
@@ -477,6 +445,13 @@ custom:
     alarms:
       - functionDuration
       - functionErrors
+
+  apiMapping:
+    defaultPath:
+      integration: emprovise/api
+      staging: emprovise/api
+      production: emprovise/api
+    path: ${self:custom.apiMapping.defaultPath.${sls:stage}, '${sls:stage}/emprovise/api'}
 
   # CORS (Cross-Origin Resource Sharing) Response headers for HTTP OPTIONS (CORS pre-flight request)
   # - Access-Control-Allow-Origin
