@@ -73,8 +73,8 @@ clean:
 
 export STAGE := testing
 export LOG_LEVEL := debug
-export BOOKMARK_URLS_BUCKET := integration-test-bookmark-urls
-export BOOKMARK_WEBPAGES_BUCKET := integration-test-bookmark-webpages
+export BOOKMARKS_BUCKET := integration-test-bookmarks
+export BOOKMARKS_SUMMARY_BUCKET := integration-test-bookmarks-summary
 
 .PHONY: localstack-start
 localstack-start:
